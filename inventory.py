@@ -100,7 +100,7 @@ def _is_local_zarr(path: str) -> bool:
     )
 
 
-def _storage_options_for_uri(uri: str, anon: bool = True) -> dict:
+def _storage_options_for_uri(uri: str, anon: bool) -> dict:
     """Return storage options; default to anonymous for public cloud data."""
     if uri.startswith("gs://"):
         return {"token": "anon"} if anon else {}
@@ -110,14 +110,23 @@ def _storage_options_for_uri(uri: str, anon: bool = True) -> dict:
 
 
 def _to_local_if_remote(path: str, anon: bool) -> str:
-    """Cache remote object to local file for engines requiring local paths (e.g., cfgrib)."""
+    """Cache remote object to local file for engines requiring local seekable paths (e.g., cfgrib, HTTP NetCDF)."""
     if path.startswith(("s3://", "gs://", "http://", "https://")):
         cache_url = f"simplecache::{path}"
-        cache_kwargs = {}
+        cache_kwargs = {"simplecache": {"same_names": True}}
         if path.startswith("s3://"):
             cache_kwargs["s3"] = _storage_options_for_uri(path, anon)
         elif path.startswith("gs://"):
             cache_kwargs["gs"] = _storage_options_for_uri(path, anon)
+        elif path.startswith(("http://", "https://")):
+            headers = {}
+            if "datastores.ecmwf.int" in path.lower():
+                cds_key = get_cds_api_key()
+                if cds_key:
+                    headers["Authorization"] = f"Bearer {cds_key}"
+            if headers:
+                cache_kwargs["http"] = {"headers": headers}
+                cache_kwargs["https"] = {"headers": headers}
         return fsspec.open_local(cache_url, **cache_kwargs)
     return path
 
@@ -159,15 +168,17 @@ def open_any_datasets(target: str, anon: bool = True) -> list[xr.Dataset]:
     is_remote = expanded_target.startswith(("s3://", "gs://", "http://", "https://"))
     base_lower = os.path.basename(lower_target)
 
-    # v12.2 fix: fail fast for missing local paths
+    # Fail fast for missing local paths
     if not is_remote and not os.path.exists(expanded_target):
         raise FileNotFoundError(f"Local path does not exist: {expanded_target}")
 
-    # v12.1 fix: never run dataset engines on local directories
-    if os.path.isdir(expanded_target):
+    # Check for Zarr format prior to rejecting directory targets
+    is_zarr = lower_target.endswith(".zarr") or _is_local_zarr(expanded_target)
+
+    # Never run dataset engines on local directories UNLESS it is a valid Zarr store
+    if os.path.isdir(expanded_target) and not is_zarr:
         raise IsADirectoryError(f"Target is a directory: {expanded_target}")
 
-    is_zarr = lower_target.endswith(".zarr") or _is_local_zarr(expanded_target)
     is_grib_ext = lower_target.endswith(GRIB_EXTENSIONS)
     local_magic = sniff_local_magic(expanded_target) if os.path.isfile(expanded_target) else None
 
@@ -218,17 +229,11 @@ def open_any_datasets(target: str, anon: bool = True) -> list[xr.Dataset]:
                 pass  # fall through to guarded GRIB fallback
 
     elif expanded_target.startswith(("http://", "https://")):
-        headers = {}
-        if "datastores.ecmwf.int" in lower_target:
-            cds_key = get_cds_api_key()
-            if cds_key:
-                headers["Authorization"] = f"Bearer {cds_key}"
-        fs, clean_path = fsspec.core.url_to_fs(expanded_target, headers=headers)
-        with fs.open(clean_path, "rb") as f:
-            try:
-                return [xr.open_dataset(f)]
-            except Exception:
-                pass  # fall through to guarded GRIB fallback
+        try:
+            local_path = _to_local_if_remote(expanded_target, anon)
+            return [xr.open_dataset(local_path)]
+        except Exception:
+            pass  # fall through to guarded GRIB fallback
 
     else:
         # 5) Local/other files: xarray autodetect first
@@ -237,8 +242,7 @@ def open_any_datasets(target: str, anon: bool = True) -> list[xr.Dataset]:
         except Exception:
             pass  # fall through to guarded GRIB fallback
 
-    # 6) Guarded GRIB fallback (v12.3):
-    # only if there's a GRIB hint.
+    # 6) Guarded GRIB fallback: only if there's a GRIB hint.
     grib_hint = (
         is_grib_ext
         or (local_magic == "grib")
@@ -533,7 +537,6 @@ def main():
     except Exception as e:
         expanded = os.path.expanduser(target)
 
-        # v12.2: clean missing-local-path message
         if isinstance(e, FileNotFoundError):
             print(f"Error: local path not found: {expanded}")
             sys.exit(1)

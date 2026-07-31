@@ -216,7 +216,7 @@ Optional/auth-related environment support:
 ## Zarr consolidated metadata warning
 
 If you see warnings about consolidated metadata fallback:
-- For stores you control: consolidate metadata once.
+- For stores you control: consolidate metadata once (python conolidate_zarr_metadata.py).
 - For read-only/public stores: open with `consolidated=False` in custom workflows if needed.
 
 ## Cloud auth errors with `--auth`
@@ -244,4 +244,4 @@ Current practical exit behavior:
 
 ## Acknowledgment & Disclaimer
 
-This software framework was developed with the assistance of an AI collaborator (Gemini) under human technical direction, supervision, review and testing. 
+These scripts and documentation were developed with the assistance of an AI collaborator (Gemini) under human technical direction, supervision, review and testing. 
