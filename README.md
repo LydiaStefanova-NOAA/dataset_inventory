@@ -81,7 +81,7 @@ For `s3://` and `gs://`, the tool defaults to anonymous reads.
 - Use **no** `--auth` for public data.
 - Use `--auth` only when authenticated access is required. (NOT TESTED)
 
-## 2) GRIB dual-time reporting
+## 2) GRIB time reporting
 
 When available, time output includes multiple relevant coordinates, such as:
 
@@ -216,7 +216,7 @@ Optional/auth-related environment support:
 ## Zarr consolidated metadata warning
 
 If you see warnings about consolidated metadata fallback:
-- For stores you control: consolidate metadata once (python conolidate_zarr_metadata.py).
+- For stores you control: consolidate metadata once -- use included script (python consolidate_zarr_metadata.py).
 - For read-only/public stores: open with `consolidated=False` in custom workflows if needed.
 
 ## Cloud auth errors with `--auth`
