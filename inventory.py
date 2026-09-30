@@ -14,6 +14,7 @@ import numpy as np
 import xarray as xr
 
 SHORTCUTS = {
+    "core": "https://storage.googleapis.com/noaa-nws-ncep-core/grib/month/pgb/2026",
     "era5": "gs://gcp-public-data-arco-era5/ar/1959-2022-1h-360x181_equiangular_with_poles_conservative.zarr",
     "era5_local": "/scratch3/NCEPDEV/global/Lydia.B.Stefanova/project/SFSbeta/data/era5_monthly_1deg_1991-2022.zarr",
     "sfs": "s3://noaa-oar-sfsdev-pds/experiments/beta1/reforecast/05/atm_monthly.zarr",
